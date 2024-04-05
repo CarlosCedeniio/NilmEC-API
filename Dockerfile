@@ -8,7 +8,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install Flask and other dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 # Copy the Flask app code to the working directory
 COPY app.py .

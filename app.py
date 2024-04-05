@@ -101,7 +101,9 @@ def getConsumption():
         df_suma_por_dia = df.groupby(pd.Grouper(freq='D')).sum(numeric_only=True).reset_index()
         total_acumulado = df_suma_por_dia['costo_usd_A'].sum() + df_suma_por_dia['costo_usd_B'].sum() + df_suma_por_dia['costo_usd_C'].sum()
         print(total_acumulado)
-        return jsonify({'total': total_acumulado})
+        response = jsonify({'total': total_acumulado})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        return response
 
 @app.route('/getForecast')
 def getForecast():
@@ -167,7 +169,11 @@ def getForecast():
                 'forecast_c': forecast_c,
                 'total_acumulado': total_acumulado
             }
-        return jsonify(respuesta)
+        
+        response = jsonify(respuesta)
+        response.headers.add("Access-Control-Allow-Origin", "*")
+
+        return response
         
     
 
