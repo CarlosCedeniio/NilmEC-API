@@ -323,4 +323,4 @@ if __name__ == '__main__':
     scheduler.add_job(func=start_task, trigger="interval", minutes=20, max_instances=3)
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown())
-    CORS(app.run(host='0.0.0.0', port=5011), origins=['*'])
+    CORS(app.run(host='0.0.0.0', port=5000), origins=['*'])
