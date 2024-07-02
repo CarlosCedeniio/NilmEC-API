@@ -35,6 +35,11 @@ def save_object_to_file(obj, filename):
     with open(filename, 'w') as file:
         file.write(json_data + '\n')
 
+def save_object_to_file_plain(obj, filename):
+    json_data = json.dumps(obj, indent=4)
+    with open(filename, 'w') as file:
+        file.write(json_data + '\n')
+
 pipeline = ChronosPipeline.from_pretrained(
   "amazon/chronos-t5-tiny",
   torch_dtype=torch.bfloat16,
@@ -219,6 +224,63 @@ def getConsumption():
         response.headers.add("Access-Control-Allow-Origin", "*")
         return response
 
+@app.route('/calculatePastMonthsConsumptionBill')
+def calculatePastMonthsConsumptionBill():
+    months = {}
+    for i in range (1,4):  
+        now = datetime.datetime.now()
+        start_of_month = now.replace(day=1 , month=now.month-i)
+        end_of_month = now.replace(day=1, month=now.month-i+1) - datetime.timedelta(days=1)
+        first_day = start_of_month.strftime('%d/%m/%Y 05:00:00')
+        last_day = end_of_month.strftime('%d/%m/%Y 05:00:00') 
+        url = 'https://aias.espol.edu.ec/api/hayiot/getDataWeb'
+        data = {
+            "id": "64ad81a0dc5442c4e0796382",
+            "start": first_day,
+            "end": last_day,
+            "tags": ['potencia_A', 'potencia_B', 'potencia_C']
+            }
+
+        response = post_request(url, data)
+        if response:
+            df = pd.DataFrame(response)
+            df['sensedAt'] = pd.to_datetime(df['sensedAt'], unit='ms')
+            df.set_index('sensedAt', inplace=True)
+            pivot_table = df.pivot(columns='type', values='data')
+
+
+            df = pivot_table.reset_index()
+            df.set_index('sensedAt', inplace=True)
+            df['fecha']=df.index
+            df['diferencia_segundos'] = df['fecha'].diff().dt.total_seconds()
+            df['diferencia_segundos'] = df['diferencia_segundos'].fillna(10)
+
+            w_2_kwh = 1/(1000*3600)
+
+            df['energia_A'] = (df['potencia_A'] * df['diferencia_segundos']) * w_2_kwh
+            constante = 0.06
+            df['costo_usd_A'] =  df['energia_A'] * constante
+
+            df['energia_B'] = (df['potencia_B'] * df['diferencia_segundos']) * w_2_kwh
+            constante = 0.06
+            df['costo_usd_B'] =  df['energia_B'] * constante
+
+            df['energia_C'] = (df['potencia_C'] * df['diferencia_segundos']) * w_2_kwh
+            constante = 0.06
+            df['costo_usd_C'] =  df['energia_C'] * constante
+
+            df_suma_por_dia = df.groupby(pd.Grouper(freq='D')).sum(numeric_only=True).reset_index()
+            total_acumulado = df_suma_por_dia['costo_usd_A'].sum() + df_suma_por_dia['costo_usd_B'].sum() + df_suma_por_dia['costo_usd_C'].sum()
+            key = start_of_month.strftime('%b')
+            months[key] = total_acumulado
+
+    print(months)
+    save_object_to_file_plain(months, 'pastMonths.txt')
+    response = jsonify(months)
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    return response
+
+
 @app.route('/forceUpdateForecast')
 def forceUpdateForecast():
     
@@ -242,6 +304,15 @@ def getForecast():
 
         return response
 
+@app.route('/getPastMonthsBills')
+def getPastMonthsBills():
+        with open('pastMonths.txt', 'r') as file:
+            data = json.load(file)
+
+        response = jsonify(data)
+        response.headers.add("Access-Control-Allow-Origin", "*")
+
+        return response
 
 
 
@@ -249,7 +320,7 @@ def getForecast():
 if __name__ == '__main__':
     start_task()
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=start_task, trigger="interval", minutes=10, max_instances=3)
+    scheduler.add_job(func=start_task, trigger="interval", minutes=20, max_instances=3)
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown())
     CORS(app.run(host='0.0.0.0', port=5011), origins=['*'])
